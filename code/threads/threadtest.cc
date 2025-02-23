@@ -36,11 +36,17 @@ void SimpleThread(int which) {
 //      to call SimpleThread, and then calling SimpleThread ourselves.
 //----------------------------------------------------------------------
 
-void ThreadTest() {
-    DEBUG('t', "Entering SimpleTest\n");
+void
+ThreadTest ()
+{
+    DEBUG ('t', "Entering SimpleTest\n");
 
-    Thread *t = new Thread("forked thread");
+    Thread *t1 = new Thread ("forked thread", 2, 1);
+    Thread *t2 = new Thread ("forked thread", 3, 2);
 
-    t->Fork(SimpleThread, 1);
-    SimpleThread(0);
+    t1->Fork (SimpleThread, 1);
+    t2->Fork (SimpleThread, 2);
+
+    SimpleThread (0);
 }
+

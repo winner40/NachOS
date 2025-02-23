@@ -79,7 +79,7 @@ class Thread {
     int machineState[MachineStateSize]; // all registers except for stackTop
 
   public:
-    Thread(const char *debugName); // initialize a Thread
+    Thread(const char *debugName, int id, int sp); // initialize a Thread with an id and a stack pointer
     ~Thread();                     // deallocate a Thread
     // NOTE -- thread being deleted
     // must not be running when delete
@@ -100,6 +100,13 @@ class Thread {
     const char *getName() { return (name); }
     void Print() { printf("%s, ", name); }
 
+    // MULTI-THREADING PURPOSE
+    int GetThreadID(){return (threadID);}
+    void SetThreadID(int ID);
+    int GetParentThreadID(){return (p_threadID);}
+    void SetParentThreadID(int ID);
+    int GetStackPointer(){ return (stackPointer); }
+
   private:
     // some of the private data for this class is listed above
 
@@ -108,6 +115,11 @@ class Thread {
     // (If NULL, don't deallocate stack)
     ThreadStatus status; // ready, running or blocked
     const char *name;
+
+    // MULTI-THREADING PURPOSE
+    int threadID; //id of the thread
+    int p_threadID; //id of the parent of the thread for later use
+    int stackPointer; //stack pointer of the thread
 
     void StackAllocate(VoidFunctionPtr func, int arg);
     // Allocate a stack for thread.

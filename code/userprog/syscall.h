@@ -13,7 +13,10 @@
 #ifndef SYSCALLS_H
 #define SYSCALLS_H
 
+
 #include "copyright.h"
+
+
 
 /* system call codes -- used by the stubs to tell the kernel which system call
  * is being asked for
@@ -30,7 +33,32 @@
 #define SC_Fork 9
 #define SC_Yield 10
 
+// Step 2: I/O
+#define SC_PutChar 11
+#define SC_GetChar 12
+#define SC_GetString 13
+#define SC_PutString 14
+#define SC_GetInt 15
+#define SC_PutInt 16
+
+// Step 3: Multi-threading
+#define SC_ThreadCreate 17
+#define SC_ThreadExit 18
+#define SC_ThreadJoin 19
+#define SC_SemInit 20
+#define SC_SemP 21
+#define SC_SemV 22
+
+// Step 4: Multi-process and virtual memory
+#define SC_ForkExec 23
+#define SC_WaitProcess 24
+#define SC_GetProcessID 25
+
 #ifdef IN_USER_MODE
+
+typedef int sem_t;
+
+
 
 // LB: This part is read only on compiling the test/*.c files.
 // It is *not* read on compiling test/start.S
@@ -47,6 +75,54 @@
 
 /* Stop Nachos, and print out performance stats */
 void Halt() __attribute__((noreturn));
+
+/*the creation of a user semaphore*/
+sem_t *SemInit(int val);
+
+/*the semP syscall*/
+void SemP(sem_t *);
+
+/*the semV syscall*/
+void SemV(sem_t *);
+
+/*the join syscall*/
+void UserThreadJoin();
+
+/*the ThreadCreate syscall*/
+int UserThreadCreate(void f(void *arg), void *arg);
+
+/*the ThreadExit syscall*/
+void UserThreadExit();
+
+/*the putchar syscall*/
+void PutChar(char c);
+
+/*the getchar syscall*/
+char GetChar();
+
+/*the putstring syscall*/
+void PutString(char *c);
+
+/*the getstring syscall*/
+char GetString(char *s, int n);
+
+/*the putint syscall*/
+void PutInt(int n);
+
+/*the getint syscall*/
+char GetInt(int *n);
+
+/* Launch the executable "s" concurrently. 
+ */
+int ForkExec(char *s) ;
+
+/* Waits for process pid to finish*/
+
+int WaitProcess(int processID);
+
+/* Return the pid of the current process */
+
+int GetProcessID();
 
 /* Address space control operations: Exit, Exec, and Join */
 
@@ -88,7 +164,7 @@ typedef int OpenFileId;
 #define ConsoleOutput 1
 
 /* Create a Nachos file, with "name" */
-void Create(char *name);
+void Create(char *name, int size);
 
 /* Open the Nachos file "name", and return an "OpenFileId" that can
  * be used to read and write to the file.
@@ -122,6 +198,8 @@ void Fork(void (*func)());
  * or not.
  */
 void Yield();
+
+// void PutChar(char c);
 
 #endif // IN_USER_MODE
 

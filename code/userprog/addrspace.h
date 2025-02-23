@@ -17,7 +17,13 @@
 #include "filesys.h"
 #include "translate.h"
 
-#define UserStackSize 1024 // increase this as necessary!
+#define UserStackSize 1048 // increase this as necessary!
+
+// MULTI-THREADING PURPOSE
+#include "bitmap.h"
+
+class Lock;
+class Condition;
 
 class AddrSpace {
   public:
@@ -32,11 +38,60 @@ class AddrSpace {
     void SaveState();    // Save/restore address space-specific
     void RestoreState(); // info on a context switch
 
+    int GetNumThreads();
+    unsigned int GetNextThreadID();
+		bool IsCreated() ;
+    int processID;
+    unsigned int max_threads;
+
+    /* Resource management */
+    /* Methods for Thread Table management */
+    void UnlockThreadTable();
+    int LockThreadTable();
+    void AddThread(unsigned int ID);
+    void RemoveThread(unsigned int ID);
+    bool HasThread(unsigned int ID);
+
+    /* Methods for Thread Stack management */
+		void LockThreadStack() ;
+		void UnlockThreadStack() ;
+		int GetStackPointer() ;
+		void RemoveStackPointer(int i) ;
+
+    /* Synch management */
+    /* Methods for waiting a thread */
+		void InitJoinConditions() ;
+		void DeleteJoinConditions() ;
+		void WaitJoinCondition(unsigned int ID) ;
+		void BroadcastJoinCondition(unsigned int ID) ;
+
+    /* Methods for exiting a thread */
+		void WaitExitCondition() ;
+		void BroadcastExitCondition() ;
+
+    /* Methods for frame management */
+    void FreeFrames() ;
+
+    /* Init function */
+    void InitSpaceSetup();
+
   private:
-    TranslationEntry *pageTable; // Assume linear page table translation
-    // for now!
-    unsigned int numPages; // Number of pages in the virtual
-    // address space
+
+    TranslationEntry *pageTable; 
+    unsigned int numPages; 
+    bool isSpaceCreated;                    // represents whether the address space has been successfully created
+    unsigned int nb_threads;                // total number of threads accomodable in the address space
+    unsigned int thread_counter;            // counter for assigning unique thread ID throughout the address space life
+    BitMap* threadStackBitmap;              // manages the allocation of stack regions for the threads of the same address space
+    Lock* threadTableLock;                  // lock to protect access to the thread Table
+    Lock* threadStackBitmapLock;             // lock to protect acces to the thread stack table
+    Condition *threadExitCond;              // condition variable used to manage synchronization when threads exit
+    unsigned int* threadTable;              // arrray that stores the IDs of the thread currently active in the address space
+    Condition** threadSynchTable;           // array of condition variable for thread synchronization, mainly used for coordination and wait
+
 };
+
+void copyStringFromMachine(int from, char *to, unsigned size);
+int copyStringToMachine(char *from, int to, unsigned int size);
 
 #endif // ADDRSPACE_H

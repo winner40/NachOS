@@ -50,7 +50,7 @@ class DirectoryEntry {
 
 class Directory {
   public:
-    Directory(int size); 		// Initialize an empty directory
+    Directory(int size, int sector, int parentSector); 		// Initialize an empty directory
 					// with space for "size" files
     ~Directory();			// De-allocate the directory
 
@@ -71,13 +71,22 @@ class Directory {
 					//  of the directory -- all the file
 					//  names and their contents.
 
+
+    void SetHeader(FileHeader * h){DirHdr = h;}
+    FileHeader *GetHeader(){return DirHdr;}
+    int getTable(int i){return table[i].sector;}
+    char *getFileName(int i){if(table[i].inUse){return table[i].name;}else {return NULL;}}
+
+    void setup();
+
   private:
     int tableSize;			// Number of directory entries
     DirectoryEntry *table;		// Table of pairs: 
-					// <file name, file header location> 
+					// <file name, header location> table[0] = parent sector, table[1] = curentheader sector
 
     int FindIndex(const char *name);	// Find the index into the directory 
 					//  table corresponding to "name"
+    FileHeader *DirHdr;
 };
 
 #endif // DIRECTORY_H

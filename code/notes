@@ -1,0 +1,9 @@
+directory.cc
+    -fetchFrom/writeBack: use the openFile arg to read at his position
+    -adding a convention: table[0] = header(..), table[1] = header(.)
+filehdr.h
+    (ever done) adding an atribut type
+filesys.h
+    (ever done) adding an atribut cd
+    -adding a function moveCd: if exist, cd->fetchFrom(new Openfile(cd->table[newcd]))
+updating the shell to allow testing (commands cd, ls, exec)

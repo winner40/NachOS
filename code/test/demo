@@ -1,0 +1,40 @@
+//------------------------------------
+//      CONSOLE: INPUT/OUTPUT
+//------------------------------------
+
+Test putString : Display a prompt message requiring the user to type any string and echoing it back
+./nachos-step2 -x ./putstring
+
+Test putInt : Print an integer and Display a prompt message requiring the user to type enter a number and echoing it back
+./nachos-step2 -x ./putint
+
+//------------------------------------
+//          MULTITHREADING
+//------------------------------------
+
+Test threads: Creates a new thread and print a passed message after creation
+./nachos-step3 -rs -x ./threads
+
+Test userpages0: Creates two new threads: one printing A, the other B and executes in interleaving
+./nachos-step3 -rs -x ./userpages0
+
+Test makethreads: Creates multiple threads and waits for there execution before ending
+./nachos-step3 -rs -x ./makethreads
+
+Test semTest : Creates two threads using semaphores and checks that the operations were made atomically-like, 
+increment and display a shared sum variable
+./nachos-step3 -rs -x ./semTest
+
+//----------------------------------------------
+//      VIRTUAL MEMORY AND MULTIPLE PROCESS
+//----------------------------------------------
+
+Test process: Creates two process to execute two different program in interleaving | both printing a message
+./nachos-step4 -rs -x ./process
+
+Test makeprocess: Creates two process to execute and waits their completion
+./nachos-step4 -rs -x ./makeprocesses
+
+//----------------------------------------------
+//                 FILE SYSTEM
+//----------------------------------------------

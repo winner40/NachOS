@@ -82,7 +82,7 @@ FileSystem::FileSystem(bool format)
     DEBUG('f', "Initializing the file system.\n");
     if (format) {
         BitMap *freeMap = new BitMap(NumSectors);
-        Directory *directory = new Directory(NumDirEntries);
+        Directory *directory = new Directory(NumDirEntries, 1, 1);
 	FileHeader *mapHdr = new FileHeader;
 	FileHeader *dirHdr = new FileHeader;
 
@@ -114,6 +114,7 @@ FileSystem::FileSystem(bool format)
 
         freeMapFile = new OpenFile(FreeMapSector);
         directoryFile = new OpenFile(DirectorySector);
+       
      
     // Once we have the files "open", we can write the initial version
     // of each file back to disk.  The directory at this point is completely
@@ -140,6 +141,11 @@ FileSystem::FileSystem(bool format)
         freeMapFile = new OpenFile(FreeMapSector);
         directoryFile = new OpenFile(DirectorySector);
     }
+     cd = DirectorySector;
+     parentCd = DirectorySector;
+     for(int i = 0; i < 10; i++){
+        userFile[i] = NULL;
+     }
 }
 
 //----------------------------------------------------------------------
@@ -172,18 +178,20 @@ FileSystem::FileSystem(bool format)
 //----------------------------------------------------------------------
 
 bool
-FileSystem::Create(const char *name, int initialSize)
+FileSystem::Create(const char *name, int initialSize, int type)
 {
+    OpenFile *cdLoaded = new OpenFile(cd);
     Directory *directory;
+    Directory *newd;
     BitMap *freeMap;
     FileHeader *hdr;
     int sector;
     bool success;
-
     DEBUG('f', "Creating file %s, size %d\n", name, initialSize);
 
-    directory = new Directory(NumDirEntries);
-    directory->FetchFrom(directoryFile);
+    directory = new Directory(NumDirEntries, cd, parentCd);
+    directory->FetchFrom(cdLoaded);
+    directory->setup();
 
     if (directory->Find(name) != -1)
       success = FALSE;			// file is already in directory
@@ -201,9 +209,18 @@ FileSystem::Create(const char *name, int initialSize)
             	success = FALSE;	// no space on disk for data
 	    else {	
 	    	success = TRUE;
+                hdr->setType(type);
+                if(type == 0){
+                    newd = new Directory(NumDirEntries, sector, cd);
+                    newd->SetHeader(hdr);
+                    OpenFile *tmp = new OpenFile(hdr->getFstSector());
+                    newd->WriteBack(tmp);
+                    delete newd;
+                    delete tmp;
+                }
 		// everthing worked, flush all changes back to disk
-    	    	hdr->WriteBack(sector); 		
-    	    	directory->WriteBack(directoryFile);
+    	    	hdr->WriteBack(sector); 	
+    	    	directory->WriteBack(cdLoaded);
     	    	freeMap->WriteBack(freeMapFile);
 	    }
             delete hdr;
@@ -211,6 +228,7 @@ FileSystem::Create(const char *name, int initialSize)
         delete freeMap;
     }
     delete directory;
+    delete cdLoaded;
     return success;
 }
 
@@ -223,11 +241,10 @@ FileSystem::Create(const char *name, int initialSize)
 //
 //	"name" -- the text name of the file to be opened
 //----------------------------------------------------------------------
-
-OpenFile *
+  OpenFile *
 FileSystem::Open(const char *name)
 { 
-    Directory *directory = new Directory(NumDirEntries);
+    Directory *directory = new Directory(NumDirEntries, cd, parentCd);
     OpenFile *openFile = NULL;
     int sector;
 
@@ -239,6 +256,7 @@ FileSystem::Open(const char *name)
     delete directory;
     return openFile;				// return NULL if not found
 }
+
 
 //----------------------------------------------------------------------
 // FileSystem::Remove
@@ -257,13 +275,16 @@ FileSystem::Open(const char *name)
 bool
 FileSystem::Remove(const char *name)
 { 
+    if(name == NULL){return FALSE;}
     Directory *directory;
     BitMap *freeMap;
     FileHeader *fileHdr;
     int sector;
+    OpenFile *openFile = new OpenFile(cd);
     
-    directory = new Directory(NumDirEntries);
-    directory->FetchFrom(directoryFile);
+    directory = new Directory(NumDirEntries, cd, parentCd);
+    directory->FetchFrom(openFile);
+    directory->setup();
     sector = directory->Find(name);
     if (sector == -1) {
        delete directory;
@@ -271,6 +292,16 @@ FileSystem::Remove(const char *name)
     }
     fileHdr = new FileHeader;
     fileHdr->FetchFrom(sector);
+
+    //for removing all the sub-file
+    if(!fileHdr->getType()){
+        int tmp = cd;
+        for(int i = 2; i < NumDirEntries; i++){
+            cd = sector;
+            this->Remove(directory->getFileName(i));
+            cd = tmp;
+        }
+    }
 
     freeMap = new BitMap(NumSectors);
     freeMap->FetchFrom(freeMapFile);
@@ -284,6 +315,7 @@ FileSystem::Remove(const char *name)
     delete fileHdr;
     delete directory;
     delete freeMap;
+    delete openFile;
     return TRUE;
 } 
 
@@ -295,11 +327,14 @@ FileSystem::Remove(const char *name)
 void
 FileSystem::List()
 {
-    Directory *directory = new Directory(NumDirEntries);
+    Directory *directory = new Directory(NumDirEntries, cd, parentCd);
+    OpenFile *openFile = new OpenFile(cd);
 
-    directory->FetchFrom(directoryFile);
+    directory->FetchFrom(openFile);
+    directory->setup();
     directory->List();
     delete directory;
+    delete openFile;
 }
 
 //----------------------------------------------------------------------
@@ -318,7 +353,8 @@ FileSystem::Print()
     FileHeader *bitHdr = new FileHeader;
     FileHeader *dirHdr = new FileHeader;
     BitMap *freeMap = new BitMap(NumSectors);
-    Directory *directory = new Directory(NumDirEntries);
+    Directory *directory = new Directory(NumDirEntries, cd,parentCd);
+    OpenFile *openFile = new OpenFile(cd);
 
     printf("Bit map file header:\n");
     bitHdr->FetchFrom(FreeMapSector);
@@ -331,11 +367,82 @@ FileSystem::Print()
     freeMap->FetchFrom(freeMapFile);
     freeMap->Print();
 
-    directory->FetchFrom(directoryFile);
+    directory->FetchFrom(openFile);
+    directory->setup();
     directory->Print();
 
     delete bitHdr;
     delete dirHdr;
     delete freeMap;
     delete directory;
+    delete openFile;
 } 
+
+//----------------------------------------------------------------------
+// FileSystem::moveCd
+// 	change the current directory to ./name if name
+//  reference a subdirectory.
+//
+// retrun 1 if done and -1 if name isn't a subdirectorydirectory 
+//----------------------------------------------------------------------
+
+int FileSystem::moveCd(char *name){
+    Directory *directory = new Directory(NumDirEntries, cd, parentCd);
+    OpenFile *openFile = new OpenFile(cd);
+    int newSector;
+
+    directory->FetchFrom(openFile);
+    directory->setup();
+    if((newSector = directory->Find(name)) == -1){
+        printf("error: unable to find %s in the current directory\n", name);
+        delete directory;
+        return -1;
+    }
+
+    FileHeader *h = new FileHeader();
+    h->FetchFrom(newSector);
+    if(h->getType()==1){
+        delete h;
+        printf("%s is not a directory\n", name);
+        return -1;
+    }
+
+    //case cd ..
+    if(name[0] == '.' && name[1] == '.'){
+        cd = parentCd;
+        openFile = new OpenFile(parentCd);
+        directory->FetchFrom(openFile);
+        cd = directory->getTable(0);
+        delete openFile;
+        delete directory;
+    }
+    //case cd ./dir
+    else{
+        parentCd = cd;
+        cd = newSector;
+    }
+    return 1;
+}
+
+
+int FileSystem::do_userOpen(char *name){
+    OpenFile *tmp = this->Open(name);
+    if(tmp == NULL){return-1;}
+    int i = 0;
+    while(userFile[i] == NULL){i++;}
+    if(i == 15){return -1;}
+    userFile[i] = tmp;
+    return i+2;
+}
+
+void FileSystem::do_userWrite(char *buff, int size, int fd){
+    fd = fd-2;
+    if(userFile[fd] == NULL){return;}
+    userFile[fd]->Write(buff, size);
+}
+
+int FileSystem::do_userRead(char *buff, int size, int fd){
+    fd = fd-2;
+    if(userFile[fd] == NULL){return 0;}
+    return userFile[fd]->Read(buff, size);
+}

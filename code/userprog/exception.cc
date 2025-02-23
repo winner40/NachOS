@@ -24,6 +24,10 @@
 #include "copyright.h"
 #include "syscall.h"
 #include "system.h"
+#include "userthread.h"
+#include "userSem.h"
+#include "userprocess.h"
+#include "filesys.h"
 
 //----------------------------------------------------------------------
 // UpdatePC : Increments the Program Counter register in order to resume
@@ -61,16 +65,191 @@ static void UpdatePC() {
 //      are in machine.h.
 //----------------------------------------------------------------------
 
-void ExceptionHandler(ExceptionType which) {
-    int type = machine->ReadRegister(2);
+int type;
+int arg1;
+int arg2;
+int arg3;
+int arg4;
+Semaphore *tmp;
 
-    if ((which == SyscallException) && (type == SC_Halt)) {
-        DEBUG('a', "Shutdown, initiated by user program.\n");
-        interrupt->Halt();
-    } else {
-        printf("Unexpected user mode exception %d %d\n", which, type);
-        ASSERT(FALSE);
+
+void ExceptionHandler(ExceptionType which) {
+    IntStatus oldLevel = interrupt->SetLevel(IntOff);
+
+    type = machine->ReadRegister(2);
+    arg1 = machine->ReadRegister(4);
+    arg2 = machine->ReadRegister(5);
+    arg3 = machine->ReadRegister(6);
+    arg4 = machine->ReadRegister(7);
+
+    if (which == SyscallException) {
+
+        switch (type)
+        {
+            case SC_Halt:
+                DEBUG('a', "Shutdown, initiated by user program.\n");
+
+                do_UserProcessHalt();
+                break;
+
+            case SC_GetChar:
+                machine->WriteRegister(2, synchConsole->SynchGetChar(false));
+                break;
+
+            case SC_PutChar:
+                synchConsole->SynchPutChar((char)arg1);
+                break;
+
+            case SC_PutInt:
+                synchConsole->SynchPutInt((int)arg1);
+                break;
+            
+            case SC_GetInt: {
+                // IF ERROR on getting int coming back here
+                int to = (int) arg1;
+                int tmp_val;
+                // int r = (int **)addr;
+                synchConsole->SynchGetInt(&tmp_val);
+                machine->WriteMem(to, sizeof(int), tmp_val);
+                machine->WriteRegister(2, 0);
+                break;
+            }
+            
+            case SC_GetString: {
+                int to = arg1;
+                unsigned string_size = arg2;
+                char *string_buffer = new char[string_size];
+                
+                synchConsole->SynchGetString(string_buffer, string_size);
+                copyStringToMachine(string_buffer, to, string_size);
+
+                delete[] string_buffer;
+                break;
+            }
+            
+            case SC_PutString: {
+                char *string_buffer = new char[MAX_STRING_SIZE];
+                int from = arg1;
+                copyStringFromMachine(from, string_buffer, MAX_STRING_SIZE);
+                synchConsole->SynchPutString(string_buffer);
+                delete[] string_buffer;
+                break;
+            }
+
+            case SC_ThreadCreate: {
+                DEBUG('a', "Creation of a new user thread, initiated by user program.\n");
+                int cres = do_UserThreadCreate(arg1,arg2,arg3);
+                machine->WriteRegister(2, cres);
+                break;
+            }
+            case SC_ThreadExit:
+                DEBUG('a', "Termination of a user thread, initiated by user program.\n");
+                do_UserThreadExit();
+                break;
+
+            case SC_ThreadJoin:
+                DEBUG('a', "Joining a user thread, initiated by user program.\n");
+                do_UserThreadJoin((int)arg1);
+                break;
+
+            case SC_SemInit:
+                DEBUG('a', "Creating a new user semaphore.\n");
+                tmp = SemInit(arg1);
+                machine->WriteRegister(2, (int) tmp);
+                break;
+
+            case SC_SemP:
+                DEBUG('a', "UserSem->P().\n");
+                SemP((Semaphore *)arg1);
+                break;
+
+            case SC_SemV:
+                DEBUG('a', "UserSem->V().\n");
+                SemV((Semaphore *)arg1);
+                break;
+
+            case SC_Exit:
+                if(arg1 == 0){
+                    DEBUG('a', "User program exiting normally\n");
+                }
+                else{
+                    printf("User program exiting with an error: %d\n", arg1);
+                }
+                do_UserProcessExit();
+                break;
+            
+            case SC_ForkExec: {
+                char filename[MAX_FILENAME];
+                copyStringFromMachine(arg1, filename, MAX_FILENAME);
+                int res = do_UserProcessCreate(filename, arg2, arg3);
+                machine->WriteRegister(2, res);
+                break;
+            }
+
+            case SC_WaitProcess: {
+                if(arg1 > TEMP_MAXPROC_NUMBER || arg1 < 0 || arg1 == currentThread->space->processID){
+                    fprintf(stderr, "Error in Exception: Got a wrong process ID in WaitProcess: %d and current: %d\n", arg1, currentThread->space->processID);
+                    machine->WriteRegister(2, -1);
+                }
+
+                do_WaitProcess(arg1);
+                machine->WriteRegister(2, 1);
+                break;
+            }
+
+            case SC_GetProcessID: 
+                machine->WriteRegister(2, currentThread->space->processID);
+                break;
+
+            case SC_Create: 
+                char filename[MAX_FILENAME];
+                copyStringFromMachine(arg1, filename, MAX_FILENAME);
+                machine->WriteRegister(2, fileSystem->Create(filename, arg2, 1));
+                break;
+
+            case SC_Open: 
+                char filenameOpen[MAX_FILENAME];
+                copyStringFromMachine(arg1, filenameOpen, MAX_FILENAME);
+                machine->WriteRegister(2, fileSystem->do_userOpen(filename));
+                break;
+
+            case SC_Write: 
+                char filenameWrite[MAX_FILENAME];
+                copyStringFromMachine(arg1, filenameWrite, MAX_FILENAME);
+                if(arg3 == 0){synchConsole->SynchPutString(filenameWrite);}
+                if(arg3 == 1){UpdatePC();return;}
+                fileSystem->do_userWrite(filenameWrite,arg2, arg3);
+                break;
+
+            case SC_Read: 
+                int nbRead;
+                char filenameRead[MAX_FILENAME];                
+                if(arg3 == 1){synchConsole->SynchGetString(filenameRead, arg2); nbRead = arg2;}
+                if(arg3 == 0){UpdatePC();return;}
+                nbRead = fileSystem->do_userRead(filenameRead,arg2, arg3);
+                copyStringToMachine(filenameRead, arg1, arg2);
+                machine->WriteRegister(2, nbRead);
+                break;
+
+            case SC_Close:
+                if(arg1 >=2){
+                    fileSystem->do_userClose(arg1);
+                }
+                break;
+
+            default:
+                printf("Unexpected!!!!!!!!!!!!! user mode exception %d %d\n", which, type);
+                // ASSERT(FALSE);
+                arg1++;
+                arg2++;
+                arg3++;
+                arg4++;
+                break;
+        }
+    }  else if( which == PageFaultException){
+        fprintf(stderr, "Error in Exception: Page Fault Error. \n");
     }
+     (void)interrupt->SetLevel(oldLevel);
 
     // LB: Do not forget to increment the pc before returning!
     UpdatePC();

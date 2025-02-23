@@ -17,8 +17,8 @@
 #include "thread.h"
 #include "copyright.h"
 #include "switch.h"
-#include "synch.h"
 #include "system.h"
+#include "threadparams.h"
 
 #define STACK_FENCEPOST                                                        \
     0xdeadbeef // this is put at the top of the
@@ -33,13 +33,17 @@
 //      "threadName" is an arbitrary string, useful for debugging.
 //----------------------------------------------------------------------
 
-Thread::Thread(const char *threadName) {
+Thread::Thread(const char *threadName, int TID, int _stackPointer) {
     name = threadName;
     stackTop = NULL;
     stack = NULL;
     status = JUST_CREATED;
+
+    threadID = TID;
+    stackPointer = _stackPointer;
 #ifdef USER_PROGRAM
     space = NULL;
+    // p_threadID = 0;
     // FBT: Need to initialize special registers of simulator to 0
     // in particular LoadReg or it could crash when switching
     // user threads.
@@ -102,7 +106,14 @@ void Thread::Fork(VoidFunctionPtr func, int arg) {
     // an already running program, as in the "fork" Unix system call.
 
     // LB: Observe that currentThread->space may be NULL at that time.
-    this->space = currentThread->space;
+    // Unpack the thread params.
+	ThreadParams *params = (ThreadParams *) arg ;
+
+	if (params->shouldSetSpace)
+	{
+		// It's an user thread (and not a process).
+		this->space = currentThread->space;
+	}
 
 #endif // USER_PROGRAM
 
@@ -376,4 +387,14 @@ void Thread::RestoreUserState() {
     for (int i = 0; i < NumTotalRegs; i++)
         machine->WriteRegister(i, userRegisters[i]);
 }
+
+// MULTI-THREADING PURPOSE
+void Thread::SetThreadID(int ID){
+    threadID = ID;
+}
+
+void Thread::SetParentThreadID(int ID){
+    p_threadID = ID;
+}
+
 #endif

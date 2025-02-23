@@ -79,7 +79,9 @@ class Lock {
 
   private:
     const char *name; // for debugging
-    // plus some other stuff you'll need to define
+    int ownerID;
+    Semaphore *mutex;
+    Semaphore *lock;
 };
 
 // The following class defines a "condition variable".  A condition
@@ -131,6 +133,8 @@ class Condition {
 
   private:
     const char *name;
-    // plus some other stuff you'll need to define
+    int waitingThreads;
+    Semaphore *mutex;
+    Semaphore *sleepLock;
 };
 #endif // SYNCH_H

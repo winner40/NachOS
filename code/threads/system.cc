@@ -19,6 +19,10 @@ Statistics *stats;           // performance metrics
 Timer *timer;                // the hardware timer device,
                              // for invoking context switches
 
+#ifdef USER_PROGRAM
+SynchConsole *synchconsole;
+#endif
+
 #ifdef FILESYS_NEEDED
 FileSystem *fileSystem;
 #endif
@@ -28,7 +32,16 @@ SynchDisk *synchDisk;
 #endif
 
 #ifdef USER_PROGRAM // requires either FILESYS or FILESYS_STUB
-Machine *machine;   // user program memory and registers
+Machine *machine;                                   
+SynchConsole *synchConsole;                         
+FrameProvider* frameProvider;                        
+Lock* processLocks[TEMP_MAXPROC_NUMBER];             
+Condition* processConds[TEMP_MAXPROC_NUMBER];       
+int processTable[TEMP_MAXPROC_NUMBER];              
+int maxProcessID;  // keeps track of maximum process ID allocated so far
+unsigned int numProcess;
+Lock *processLock;
+
 #endif
 
 #ifdef NETWORK
@@ -129,20 +142,35 @@ void Initialize(int argc, char **argv) {
     scheduler = new Scheduler(); // initialize the ready queue
     if (randomYield)             // start the timer (if needed)
         timer = new Timer(TimerInterruptHandler, 0, randomYield);
-
+    
     threadToBeDestroyed = NULL;
 
     // We didn't explicitly allocate the current thread we are running in.
     // But if it ever tries to give up the CPU, we better have a Thread
     // object to save its state.
-    currentThread = new Thread("main");
+    currentThread = new Thread("main", 1, 0); // first thread, no stack pointer yeat
     currentThread->setStatus(RUNNING);
+
+    RandomInit(2); // initialize pseudo-random number generator
+    randomYield = TRUE;
 
     interrupt->Enable();
     CallOnUserAbort(Cleanup); // if user hits ctl-C
 
 #ifdef USER_PROGRAM
-    machine = new Machine(debugUserProg); // this must come first
+
+    machine = new Machine(debugUserProg);                           // initializes the user-level machine
+    synchConsole = new SynchConsole(NULL, NULL) ;                   // initializes the synchronized console
+	frameProvider = new FrameProvider(NumPhysPages);                // initializes to a frame tracker to the number of physical pages available
+	for( int k = 0; k < 64; k++ ){                                  // initializes process related synchronization primitives and process tables
+		processLocks[k]=new Lock("Process Locks\n");                
+		processConds[k]=new Condition("Process Condition\n");       
+		processTable[k]=0;                                          // initializes the system to "no active process"
+	}	
+	maxProcessID=0;                                                 // sets the initial process ID to 0
+    numProcess = 1;                                                 // init with one process (the initial kernel process)
+    processLock = new Lock("Process Counter Lock");                 // lock for process counter access
+
 #endif
 
 #ifdef FILESYS
@@ -170,6 +198,7 @@ void Cleanup() {
 
 #ifdef USER_PROGRAM
     delete machine;
+    delete synchConsole;
 #endif
 
 #ifdef FILESYS_NEEDED
@@ -185,4 +214,12 @@ void Cleanup() {
     delete interrupt;
 
     Exit(0);
+}
+
+void AcquireProcessLock(){
+    processLock->Acquire();
+}
+
+void ReleaseProcessLock(){
+    processLock->Release();
 }

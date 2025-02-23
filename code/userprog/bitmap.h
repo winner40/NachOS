@@ -18,10 +18,13 @@
 #include "copyright.h"
 #include "openfile.h"
 #include "utility.h"
+// #include "synch.h"
 
 // Definitions helpful for representing a bitmap as an array of integers
 #define BitsInByte 8
 #define BitsInWord 32
+
+#define PagePerThread 2 // fixing the pages allowed per thread in the user-program - might find a dynamic way to set later
 
 // The following class defines a "bitmap" -- an array of bits,
 // each of which can be independently set, cleared, and tested.
@@ -30,6 +33,8 @@
 // for instance, disk sectors, or main memory pages.
 // Each bit represents whether the corresponding sector or page is
 // in use or free.
+
+// class Semaphore;
 
 class BitMap {
   public:
@@ -52,6 +57,8 @@ class BitMap {
     void FetchFrom(OpenFile *file); // fetch contents from disk
     void WriteBack(OpenFile *file); // write contents to disk
 
+    int NumThreads();
+
   private:
     int numBits;  // number of bits in the bitmap
     int numWords; // number of words of bitmap storage
@@ -59,6 +66,8 @@ class BitMap {
     //  multiple of the number of bits in
     //  a word)
     unsigned int *map; // bit storage
+    // Semaphore *findSem;
+    // Semaphore *modifSem;
 };
 
 #endif // BITMAP_H

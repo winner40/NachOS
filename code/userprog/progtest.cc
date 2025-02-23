@@ -13,6 +13,7 @@
 #include "copyright.h"
 #include "synch.h"
 #include "system.h"
+#include "synchconsole.h"
 
 //----------------------------------------------------------------------
 // StartProcess
@@ -46,8 +47,10 @@ void StartProcess(char *filename) {
 // I/O requests wait on a Semaphore to delay until the I/O completes.
 
 static Console *console;
+static SynchConsole *synchconsole;
 static Semaphore *readAvail;
 static Semaphore *writeDone;
+
 
 //----------------------------------------------------------------------
 // ConsoleInterruptHandlers
@@ -55,7 +58,6 @@ static Semaphore *writeDone;
 //----------------------------------------------------------------------
 
 static void ReadAvail(int arg) { readAvail->V(); }
-
 static void WriteDone(int arg) { writeDone->V(); }
 
 //----------------------------------------------------------------------
@@ -71,12 +73,110 @@ void ConsoleTest(char *in, char *out) {
     readAvail = new Semaphore("read avail", 0);
     writeDone = new Semaphore("write done", 0);
 
+    char EOFflag = 0;
+
     for (;;) {
+
         readAvail->P(); // wait for character to arrive
         ch = console->GetChar();
-        console->PutChar(ch); // echo it!
+        if (ch == EOF)
+            return;
+
+        console->PutChar('<'); // echo it!
         writeDone->P();       // wait for write to finish
-        if (ch == 'q')
-            return; // if q, quit
+
+        while(ch != '\n'){
+            console->PutChar(ch); // echo it!
+            writeDone->P();       // wait for write to finish
+
+            readAvail->P(); // wait for character to arrive
+            ch = console->GetChar();
+
+            if (ch == EOF){
+                ch = '\n';
+                EOFflag = 1;
+            }
+        }
+
+        console->PutChar('>'); // echo it!
+        writeDone->P();       // wait for write to finish
+
+        console->PutChar('\n'); // echo it!
+        writeDone->P();       // wait for write to finish
+    }
+
+    if(EOFflag)
+        return;
+
+    
+}
+
+// working version of synch console test
+void SynchConsoleTest(char *in, char *out) {
+    char ch;
+    char EOFflag = 0;
+    char input_buffer[255]; //temp buffer for a single line
+    int idx = 0;
+
+    synchconsole = new SynchConsole(in, out);
+
+    while (true){
+        ch = synchconsole->SynchGetChar(false);
+
+        if(ch == EOF) {
+            EOFflag = 1;
+            break;
+        }
+
+        //putting everything to console once we hit an enter
+        if(ch == '\n') {
+            synchconsole->SynchPutChar('<');
+            for(int i = 0; i < idx; ++i){
+                synchconsole->SynchPutChar(input_buffer[i]);
+            }
+            synchconsole->SynchPutChar('>');
+            synchconsole->SynchPutChar('\n');
+
+            idx = 0; //resetting the index
+        } else {
+            // store every input inside a buffer first
+            if( idx < 255){
+                input_buffer[idx++] = ch;
+            }
+        }
+
+
+    }
+
+    if(EOFflag){
+        return;
     }
 }
+
+// synch console test for testing strings and integers
+void SynchConsoleTest_SI(char *in, char *out) {
+    
+    synchconsole = new SynchConsole(in, out);
+
+    // buffer to test strings -  need?
+    char string_bugger[255];
+    int number; //will the store the integer using this one here
+
+    // Test SynchGetString and SynchPutString
+    synchconsole->SynchPutString("Testing SynchGetString  and SynchPutString. \n");
+    synchconsole->SynchPutString("Let's try with a string up to xxx characters, IDK: \n");
+    synchconsole->SynchGetString(string_bugger, sizeof(string_bugger));
+    synchconsole->SynchPutString("You entered : "); // echoing the whole world
+    synchconsole->SynchPutString(string_bugger);
+    synchconsole->SynchPutString("\n");
+
+    // //Testing SynchGetInt and SynchPutInt
+    synchconsole->SynchPutString("Testing SynchGetInt  and SynchPutInt : \n");
+    synchconsole->SynchPutString("Let's try with an integer up to xxx digits, IDK: \n");
+    synchconsole->SynchGetInt(&number);
+    synchconsole->SynchPutString("You entered : "); // echoing the whole world
+    synchconsole->SynchPutInt(number);
+    synchconsole->SynchPutString("\n");
+
+}
+

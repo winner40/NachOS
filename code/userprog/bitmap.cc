@@ -9,6 +9,7 @@
 #include "bitmap.h"
 #include "copyright.h"
 
+
 //----------------------------------------------------------------------
 // BitMap::BitMap
 //      Initialize a bitmap with "nitems" bits, so that every bit is clear.
@@ -17,12 +18,16 @@
 //      "nitems" is the number of bits in the bitmap.
 //----------------------------------------------------------------------
 
+
 BitMap::BitMap(int nitems) {
     numBits = nitems;
     numWords = divRoundUp(numBits, BitsInWord);
     map = new unsigned int[numWords];
+
     for (int i = 0; i < numBits; i++)
         Clear(i);
+    
+
 }
 
 //----------------------------------------------------------------------
@@ -70,11 +75,12 @@ void BitMap::Clear(int which) {
 
 bool BitMap::Test(int which) {
     ASSERT(which >= 0 && which < numBits);
-
-    if (map[which / BitsInWord] & (1 << (which % BitsInWord)))
+    if (map[which / BitsInWord] & (1 << (which % BitsInWord))){
         return TRUE;
-    else
+    }
+    else{
         return FALSE;
+    }
 }
 
 //----------------------------------------------------------------------
@@ -90,6 +96,7 @@ int BitMap::Find() {
     for (int i = 0; i < numBits; i++)
         if (!Test(i)) {
             Mark(i);
+            // findSem->V();
             return i;
         }
     return -1;
@@ -103,7 +110,6 @@ int BitMap::Find() {
 
 int BitMap::NumClear() {
     int count = 0;
-
     for (int i = 0; i < numBits; i++)
         if (!Test(i))
             count++;

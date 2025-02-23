@@ -92,20 +92,164 @@ void Semaphore::V() {
 // Dummy functions -- so we can compile our later assignments
 // Note -- without a correct implementation of Condition::Wait(),
 // the test case in the network assignment won't work!
-Lock::Lock(const char *debugName) {}
 
-Lock::~Lock() {}
+//---------------------------------------------------------------------------------------------
+// Lock::Lock
+//			Constructor that initializes a lock to use for synchronization
+//
+//			Initilazes two semaphores a general lock and an inner lock to ensure exclusive 
+//          access to the operations and resources. Sets the ownerID to -1 to specify that
+//          no thread holds it yet
+//			
+//			Arguments:
+//				debugName: arbitrary name given to the lock
+//----------------------------------------------------------------------------------------------
 
-void Lock::Acquire() {}
+Lock::Lock(const char *debugName) {
+    name = debugName;
+    ownerID = -1;
+    lock = new Semaphore("Lock semaphore", 1);
+    mutex = new Semaphore("Lock inner semaphore", 1);
+}
 
-void Lock::Release() {}
+//---------------------------------------------------------------------------------------------
+// Lock::~Lock
+//			Destructor that deletes resources allocated to a lock
+//
+//			This function does not take arguments and returns no value
+//----------------------------------------------------------------------------------------------
 
-Condition::Condition(const char *debugName) {}
+Lock::~Lock() {
+    delete lock;
+    delete mutex;
+}
 
-Condition::~Condition() {}
+//---------------------------------------------------------------------------------------------
+// Lock::Acquire
+//			Atomically wait for the lock to be free and then set it to busy
+//          Sets the holder of the lock to the actual thread ID, else we release
+//          the lock.
+//
+//			This function does not take arguments and returns no value
+//----------------------------------------------------------------------------------------------
 
-void Condition::Wait(Lock *conditionLock) { ASSERT(FALSE); }
+void Lock::Acquire() {
 
-void Condition::Signal(Lock *conditionLock) {}
+    lock->P();
 
-void Condition::Broadcast(Lock *conditionLock) {}
+    mutex->P();
+    if (ownerID == -1){ ownerID = currentThread->GetThreadID(); }
+	else { lock->V() ;}
+	mutex->V() ;
+}
+
+//---------------------------------------------------------------------------------------------
+// Lock::Acquire
+//			Atomically set the lock to be free. Wakes a waiting thread if any.
+//          Sets the holder of the lock to -1 to reflect that nobody holds it
+//          Only the thread that holds it can release it
+//
+//			This function does not take arguments and returns no value
+//----------------------------------------------------------------------------------------------
+
+void Lock::Release() {
+    mutex->P();
+
+    if(ownerID == currentThread->GetThreadID()){
+        ownerID = -1;
+        lock->V();
+    }
+
+    mutex->V();
+}
+
+//---------------------------------------------------------------------------------------------
+// Condition::Condition
+//			Constructor that initializes a condition variable so that it can be used
+//          for synchronization. Initially no one is waiting on the condition.
+//
+//			Arguments:
+//              debugname:  an arbitrary name for the condition variable
+//----------------------------------------------------------------------------------------------
+
+
+Condition::Condition(const char *debugName) {
+    name = debugName;
+    waitingThreads = 0;
+    sleepLock = new Semaphore("Sleeping semaphore", 0);
+    mutex = new Semaphore("Inner lock semaphore", 1);
+}
+
+//---------------------------------------------------------------------------------------------
+// Condition::~Condition
+//			Destructor that deallocates the resources given to a condition variable
+//
+//          This function takes no argument, and returns no value
+//----------------------------------------------------------------------------------------------
+
+Condition::~Condition() {
+    delete sleepLock;
+    delete mutex;
+}
+
+void Condition::Wait(Lock *conditionLock) { 
+    mutex->P();
+
+    waitingThreads++;
+    conditionLock->Release();
+    mutex->V();
+    sleepLock->P();
+    conditionLock->Acquire();
+ }
+
+
+//---------------------------------------------------------------------------------------------
+// Condition::Signal
+//			Wakes up one single thread that is waiting on the conditional variable
+//
+//			Acquires and releases the internal lock to ensure exclusive access to the condition
+//          variable during the operation. If there is at least one thread waiting on the 
+//          CV releases the associated semaphore and decrements the number of sleeping threads
+//			
+//			Arguments:
+//				conditionLock: a lock associated with the condition variable that
+//                  will be held by the caller
+//----------------------------------------------------------------------------------------------
+
+void Condition::Signal(Lock *conditionLock) {
+    mutex->P();
+
+    if(waitingThreads > 0){
+        conditionLock->Release(); // IF ERROR COME BACK HERE
+        sleepLock->V();
+        waitingThreads--;
+        conditionLock->Acquire();
+    }
+
+    mutex->V();
+}
+
+//---------------------------------------------------------------------------------------------
+// Condition::Broadcast
+//			Wakes up all threads that are waiting on the conditional variable
+//
+//			Acquires and releases the internal lock to ensure exclusive access to the condition
+//          variable during the operation. Iterates through all the threads waiting
+//          on the CV and signals each waiting thread by releasing the associated 
+//          semaphore and decrements the number of sleeping threads
+//			
+//			Arguments:
+//				conditionLock: a lock associated with the condition variable that
+//                  will be held by the caller
+//----------------------------------------------------------------------------------------------
+
+void Condition::Broadcast(Lock *conditionLock) {
+    mutex->P();
+    while(waitingThreads > 0){
+        conditionLock->Release();
+        sleepLock->V();
+        waitingThreads--;
+        conditionLock->Acquire();
+    }
+    mutex->V();
+}

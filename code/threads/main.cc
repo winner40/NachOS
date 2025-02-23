@@ -52,6 +52,7 @@
 
 #include "system.h"
 #include "utility.h"
+void shell(SynchConsole *console);
 
 // External functions used by this file
 
@@ -59,6 +60,8 @@ extern void ThreadTest(void),
     Copy(const char *unixFile, const char *nachosFile);
 extern void Print(char *file), PerformanceTest(void);
 extern void StartProcess(char *file), ConsoleTest(char *in, char *out);
+extern void SynchConsoleTest(char *in, char *out);
+extern void SynchConsoleTest_SI(char *in, char *out);
 extern void MailTest(int networkID);
 
 //----------------------------------------------------------------------
@@ -106,6 +109,30 @@ int main(int argc, char **argv) {
             interrupt->Halt(); // once we start the console, then
                                // Nachos will loop forever waiting
                                // for console input
+        } else if (!strcmp(*argv, "-sc")) { // test the console
+            if (argc == 1)
+                SynchConsoleTest(NULL, NULL);
+            else {
+                ASSERT(argc > 2);
+                SynchConsoleTest(*(argv + 1), *(argv + 2));
+                argCount = 3;
+            }
+            interrupt->Halt(); // once we start the console, then
+                               // Nachos will loop forever waiting
+                               // for console input
+        } else if (!strcmp(*argv, "-scadv")) { // test the console
+            if (argc == 1)
+                SynchConsoleTest_SI(NULL, NULL);
+
+            else {
+                ASSERT(argc > 2);
+                SynchConsoleTest_SI(*(argv + 1), *(argv + 2));
+
+                argCount = 3;
+            }
+            interrupt->Halt(); // once we start the console, then
+                               // Nachos will loop forever waiting
+                               // for console input
         }
 #endif // USER_PROGRAM
 #ifdef FILESYS
@@ -127,7 +154,14 @@ int main(int argc, char **argv) {
             fileSystem->Print();
         } else if (!strcmp(*argv, "-t")) { // performance test
             PerformanceTest();
+        } else if (!strcmp(*argv, "-nd")) { // create a new empty directory
+            ASSERT(argc > 1);
+            fileSystem->Create(*(argv + 1), 1, 0);
+        } else if (!strcmp(*argv, "-nf")) { // create a new empty file
+        ASSERT(argc > 2);
+            fileSystem->Create(*(argv + 1), atoi(*(argv + 2)), 1);
         }
+        
 #endif // FILESYS
 #ifdef NETWORK
         if (!strcmp(*argv, "-o")) {
@@ -140,7 +174,7 @@ int main(int argc, char **argv) {
         }
 #endif // NETWORK
     }
-
+    shell(synchConsole);
     currentThread->Finish(); // NOTE: if the procedure "main"
     // returns, then the program "nachos"
     // will exit (as any other normal program

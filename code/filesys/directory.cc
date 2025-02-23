@@ -35,12 +35,15 @@
 //	"size" is the number of entries in the directory
 //----------------------------------------------------------------------
 
-Directory::Directory(int size)
+Directory::Directory(int size, int sector, int parentSector)
 {
     table = new DirectoryEntry[size];
     tableSize = size;
-    for (int i = 0; i < tableSize; i++)
-	table[i].inUse = FALSE;
+    for (int i = 0; i < tableSize; i++){
+	    table[i].inUse = FALSE;
+    }
+    Add("..", parentSector);
+    Add(".", sector);
 }
 
 //----------------------------------------------------------------------
@@ -158,6 +161,7 @@ Directory::Remove(const char *name)
     if (i == -1)
 	return FALSE; 		// name not in directory
     table[i].inUse = FALSE;
+    table[i].sector = 0;
     return TRUE;	
 }
 
@@ -169,9 +173,17 @@ Directory::Remove(const char *name)
 void
 Directory::List()
 {
-   for (int i = 0; i < tableSize; i++)
-	if (table[i].inUse)
+    FileHeader *tmp = new FileHeader;
+   for (int i = 2; i < tableSize; i++){
+	if (table[i].inUse){
+        tmp->FetchFrom(table[i].sector);
+        printf("   ");
+        if(tmp->getType() == 0){
+            printf("->");
+        }
 	    printf("%s\n", table[i].name);
+    }
+   }
 }
 
 //----------------------------------------------------------------------
@@ -194,4 +206,10 @@ Directory::Print()
 	}
     printf("\n");
     delete hdr;
+}
+
+void Directory::setup(){
+    for(int i = 0; i < tableSize; i++){
+        if(table[i].sector != 0){table[i].inUse=TRUE;}
+    }
 }
